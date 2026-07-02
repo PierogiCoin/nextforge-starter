@@ -1,0 +1,42 @@
+import { NextRequest, NextResponse } from "next/server";
+
+const PROTECTED_PREFIXES = ["/dashboard", "/account"];
+const SESSION_COOKIE = "nextforge-session";
+const LOGIN_PAGE = "/login";
+
+export function middleware(request: NextRequest) {
+    const { pathname } = request.nextUrl;
+
+    const isProtected = PROTECTED_PREFIXES.some((prefix) =>
+        pathname === prefix || pathname.startsWith(`${prefix}/`)
+    );
+
+    if (!isProtected) return NextResponse.next();
+
+    const sessionCookie = request.cookies.get(SESSION_COOKIE);
+
+    if (!sessionCookie?.value) {
+        const loginUrl = new URL(LOGIN_PAGE, request.url);
+        loginUrl.searchParams.set("returnTo", pathname);
+        return NextResponse.redirect(loginUrl);
+    }
+
+    try {
+        const decoded = JSON.parse(decodeURIComponent(sessionCookie.value));
+        if (!decoded || typeof decoded !== "object" || !decoded.name) {
+            throw new Error("invalid session");
+        }
+    } catch {
+        const loginUrl = new URL(LOGIN_PAGE, request.url);
+        loginUrl.searchParams.set("returnTo", pathname);
+        const response = NextResponse.redirect(loginUrl);
+        response.cookies.delete(SESSION_COOKIE);
+        return response;
+    }
+
+    return NextResponse.next();
+}
+
+export const config = {
+    matcher: ["/dashboard/:path*", "/account/:path*"],
+};
